@@ -1,3 +1,10 @@
+# data and outputs
+*data/
+*checkpoints/
+*lightning_logs/
+*outputs/
+*submissions.csv
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
