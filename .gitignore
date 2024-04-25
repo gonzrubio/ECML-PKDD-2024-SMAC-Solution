@@ -3,7 +3,7 @@
 *checkpoints/
 *lightning_logs/
 *outputs/
-*submissions.csv
+*submission.csv
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
