@@ -11,7 +11,7 @@ from torchgeo.datamodules import QuakeSetDataModule
 
 @hydra.main(config_path="configs", config_name="default", version_base=None)
 def main(args: DictConfig):
-    pl.seed_everything(42)
+    pl.seed_everything(42, workers=True)
     torch.set_float32_matmul_precision("medium")
 
     data_module = QuakeSetDataModule(**args.dataset)
