@@ -31,6 +31,7 @@ def main(args: DictConfig):
 
     trainer = pl.Trainer(
         **args.trainer,
+        deterministic=True,
         callbacks=[checkpoint_callback, lr_monitor],
         log_every_n_steps=50,
         precision="32-true",
