@@ -1,8 +1,8 @@
 """Exploratory Data Analysis for QuakeSet
 
 VV and VH polarization mean and std (of training set) for standardizing input:
-    - mean [0.1048, 0.0189]
-    - std [0.8203, 0.0758]
+    - mean [0.1048, 0.0189] for hh and hv (or [0.1048, 0.0189, 0.1048, 0.0189])
+    - std [0.8203, 0.0758] " " " " (or [0.8203, 0.0758, 0.8203, 0.0758])
 
 """
 
