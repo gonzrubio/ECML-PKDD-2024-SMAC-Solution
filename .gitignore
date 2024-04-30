@@ -1,7 +1,8 @@
-# data and outputs
+# data, logs and outputs
 *data/
 *checkpoints/
 *lightning_logs/
+*wandb/
 *outputs/
 *submission.csv
 
