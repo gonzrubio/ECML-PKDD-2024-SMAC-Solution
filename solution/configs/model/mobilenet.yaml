@@ -4,3 +4,4 @@ task: "regression"
 in_chans: 4
 mean: [0.1048, 0.0189, 0.1048, 0.0189]
 std: [0.8203, 0.0758, 0.8203, 0.0758]
+regression_loss: "MAE"
