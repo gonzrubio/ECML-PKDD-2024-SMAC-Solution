@@ -2,6 +2,7 @@ import lightning as pl
 import torch
 from torch import nn
 from torchmetrics import Accuracy, MeanAbsoluteError
+from torchvision.transforms import v2
 from transformers import AutoConfig, AutoModelForImageClassification
 
 
@@ -17,6 +18,10 @@ class EarthQuakeModel(pl.LightningModule):
         config.num_labels = num_classes
         self.model = AutoModelForImageClassification.from_config(config)
 
+        self.standardize = v2.Normalize(
+            mean=self.hparams["mean"], std=self.hparams["std"]
+            )
+
         self.accuracy = Accuracy("multiclass", num_classes=2)
         self.regr_metric = MeanAbsoluteError()
 
@@ -24,6 +29,7 @@ class EarthQuakeModel(pl.LightningModule):
         self.train_transform = nn.Identity()
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
+        x = self.standardize(x)
         x = self.model(x)
         if hasattr(x, "logits"):
             x = x.logits
