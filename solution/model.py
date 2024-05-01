@@ -25,7 +25,13 @@ class EarthQuakeModel(pl.LightningModule):
         self.f1 = F1Score("multiclass", num_classes=2)
         self.regr_metric = MeanAbsoluteError()
 
-        self.regression_loss = nn.MSELoss()
+        if self.hparams["regression_loss"] == "MSE":
+            self.regression_loss = nn.MSELoss()
+        elif self.hparams["regression_loss"] == "MAE":
+            self.regression_loss = nn.L1Loss()
+        else:
+            print("ERROR Regression loss must be one of MSE or MAE")
+
         self.train_transform = nn.Identity()
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
