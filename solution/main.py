@@ -10,7 +10,7 @@ from omegaconf import DictConfig
 from torchgeo.datamodules import QuakeSetDataModule
 
 
-@hydra.main(config_path="configs", config_name="default", version_base=None)
+@hydra.main(config_path="configs", config_name="mobilenet", version_base=None)
 def main(args: DictConfig):
 
     pl.seed_everything(42, workers=True)
