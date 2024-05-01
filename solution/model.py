@@ -1,7 +1,7 @@
 import lightning as pl
 import torch
 from torch import nn
-from torchmetrics import Accuracy, MeanAbsoluteError
+from torchmetrics import F1Score, MeanAbsoluteError
 from torchvision.transforms import v2
 from transformers import AutoConfig, AutoModelForImageClassification
 
@@ -22,7 +22,7 @@ class EarthQuakeModel(pl.LightningModule):
             mean=self.hparams["mean"], std=self.hparams["std"]
             )
 
-        self.accuracy = Accuracy("multiclass", num_classes=2)
+        self.f1 = F1Score("multiclass", num_classes=2)
         self.regr_metric = MeanAbsoluteError()
 
         self.regression_loss = nn.MSELoss()
@@ -72,8 +72,8 @@ class EarthQuakeModel(pl.LightningModule):
 
         loss = self.regression_loss(y_r, mag)
 
-        self.accuracy((y_r >= 1).to(torch.int), label)
-        self.log("val_acc", self.accuracy)
+        self.f1((y_r >= 1).to(torch.int), label)
+        self.log("val_f1", self.f1)
         self.regr_metric(y_r, mag)
         self.log(f"val_{self.regr_metric.__class__.__name__}", self.regr_metric)
 
@@ -84,8 +84,8 @@ class EarthQuakeModel(pl.LightningModule):
 
         y_r = self(sample)
 
-        self.accuracy((y_r >= 1).to(torch.int), label)
-        self.log("val_acc", self.accuracy)
+        self.f1((y_r >= 1).to(torch.int), label)
+        self.log("val_f1", self.f1)
         self.regr_metric(y_r, mag)
         self.log(f"val_{self.regr_metric.__class__.__name__}", self.regr_metric)
 
