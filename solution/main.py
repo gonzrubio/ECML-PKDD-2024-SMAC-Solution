@@ -16,8 +16,9 @@ def main(args: DictConfig):
     pl.seed_everything(42, workers=True)
     torch.set_float32_matmul_precision("medium")
 
-    data_module = QuakeSetDataModule(**args.dataset)
     model = EarthQuakeModel(**args.model)
+    data_module = QuakeSetDataModule(**args.dataset)
+    data_module.train_aug = None
 
     run_id = time.strftime('%Y%m%d-%H%M%S')
     wandb_logger = WandbLogger(
