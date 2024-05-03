@@ -5,6 +5,7 @@
 *wandb/
 *outputs/
 *submission.csv
+*.zip
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
