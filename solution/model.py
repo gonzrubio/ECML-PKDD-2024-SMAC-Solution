@@ -39,6 +39,8 @@ class EarthQuakeModel(pl.LightningModule):
         x = self.model(x)
         if hasattr(x, "logits"):
             x = x.logits
+        # make sure predicted magnitude is between 0-10
+        x = nn.functional.sigmoid(x)*10
         return x.squeeze()
 
     def configure_optimizers(self):
