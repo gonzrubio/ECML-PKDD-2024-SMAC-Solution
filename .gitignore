@@ -4,8 +4,7 @@
 *lightning_logs/
 *wandb/
 *outputs/
-*submission.csv
-*.zip
+*submission.*
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
