@@ -35,9 +35,9 @@ class EarthQuakeModel(pl.LightningModule):
         self.train_transform =  v2.Compose([
             v2.RandomHorizontalFlip(p=0.25),
             v2.RandomVerticalFlip(p=0.25),
-            RandomErasing(p=0.25),
             v2.RandomApply(transforms=[v2.RandomRotation(degrees=(0, 180))], p=0.25),
-            v2.RandomApply(transforms=[v2.RandomCrop(size=(256, 256))], p=0.25)
+            v2.RandomApply(transforms=[v2.RandomCrop(size=(256, 256))], p=0.25),
+            RandomErasing(p=0.25)
             ])
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
