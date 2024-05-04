@@ -26,7 +26,8 @@ def main(predictions_file: str, flops: int):
 
     # Add flops and save
     predictions["flops"] = flops
-    predictions.to_csv("submission.csv", index=False)
+    compression_options = dict(method='zip', archive_name='submission.csv')
+    predictions.to_csv('submission.zip', compression=compression_options)
 
 
 if __name__ == "__main__":
