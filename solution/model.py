@@ -33,11 +33,16 @@ class EarthQuakeModel(pl.LightningModule):
             print("ERROR Regression loss must be one of MSE or MAE")
 
         self.train_transform =  v2.Compose([
-            v2.RandomHorizontalFlip(p=0.25),
-            v2.RandomVerticalFlip(p=0.25),
-            v2.RandomApply(transforms=[v2.RandomRotation(degrees=(0, 180))], p=0.25),
-            v2.RandomApply(transforms=[v2.RandomCrop(size=(256, 256))], p=0.25),
-            RandomErasing(p=0.25)
+            v2.RandomHorizontalFlip(p=0.2),
+            v2.RandomVerticalFlip(p=0.2),
+            v2.RandomApply(transforms=[v2.RandomRotation(degrees=(0, 180))], p=0.2),
+            v2.RandomApply(transforms=[v2.RandomCrop(size=(256, 256))], p=0.2),
+            v2.RandomApply(transforms=[v2.RandomChoice(transforms=[
+                RandomErasing(p=1, value='random'),
+                RandomErasing(p=1, value=0),
+                RandomErasing(p=1, value=1),
+                RandomErasing(p=1, value=-1)
+                ])], p=0.2)
             ])
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
