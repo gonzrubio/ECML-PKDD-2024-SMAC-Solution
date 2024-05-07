@@ -2,7 +2,7 @@ import lightning as pl
 import torch
 from torch import nn
 from torchmetrics import F1Score, MeanAbsoluteError
-from torchvision.transforms import v2, RandomErasing
+from torchvision.transforms import v2
 from transformers import AutoConfig, AutoModelForImageClassification
 
 
@@ -33,16 +33,18 @@ class EarthQuakeModel(pl.LightningModule):
             print("ERROR Regression loss must be one of MSE or MAE")
 
         self.train_transform =  v2.Compose([
-            v2.RandomHorizontalFlip(p=0.2),
-            v2.RandomVerticalFlip(p=0.2),
-            v2.RandomApply(transforms=[v2.RandomRotation(degrees=(0, 180))], p=0.2),
-            v2.RandomApply(transforms=[v2.RandomCrop(size=(256, 256))], p=0.2),
+            v2.RandomApply(transforms=[v2.GaussianBlur(kernel_size=5, sigma=(0.1, 2.0))], p=0.12),
+            v2.RandomHorizontalFlip(p=0.12),
+            v2.RandomVerticalFlip(p=0.12),
+            v2.RandomPerspective(p=0.12),
+            v2.RandomApply(transforms=[v2.RandomRotation(degrees=(0, 180))], p=0.12),
+            v2.RandomApply(transforms=[v2.RandomCrop(size=(256, 256))], p=0.12),
             v2.RandomApply(transforms=[v2.RandomChoice(transforms=[
-                RandomErasing(p=1, value='random'),
-                RandomErasing(p=1, value=0),
-                RandomErasing(p=1, value=1),
-                RandomErasing(p=1, value=-1)
-                ])], p=0.2)
+                v2.RandomErasing(p=1, value='random'),
+                v2.RandomErasing(p=1, value=0),
+                v2.RandomErasing(p=1, value=1),
+                v2.RandomErasing(p=1, value=-1)
+                ])], p=0.12)
             ])
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
