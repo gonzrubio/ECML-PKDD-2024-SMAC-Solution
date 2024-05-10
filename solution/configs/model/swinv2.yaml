@@ -1,0 +1,7 @@
+model_name: microsoft/swinv2-large-patch4-window12to24-192to384-22kto1k-ft
+lr: 0.0001
+task: "regression"
+in_chans: 4
+mean: [0.1048, 0.0189, 0.1048, 0.0189]
+std: [0.8203, 0.0758, 0.8203, 0.0758]
+regression_loss: "MAE"
