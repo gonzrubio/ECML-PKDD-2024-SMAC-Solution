@@ -1,6 +1,7 @@
 import lightning as pl
 import torch
 from torch import nn
+import torch.nn.functional as F
 from torchmetrics import F1Score, MeanAbsoluteError
 from torchvision.transforms import v2
 from transformers import AutoConfig, AutoModelForImageClassification
@@ -29,8 +30,15 @@ class EarthQuakeModel(pl.LightningModule):
             self.regression_loss = nn.MSELoss()
         elif self.hparams["regression_loss"] == "MAE":
             self.regression_loss = nn.L1Loss()
+        elif self.hparams["regression_loss"] == "MAE+MSE":
+            mae_weight, mse_weight = self.hparams["regression_loss_coefficients"]
+            def mae_mse_loss(output, target):
+                mse_loss = mse_weight * F.mse_loss(output, target)
+                mae_loss = mae_weight * F.l1_loss(output, target)
+                return mse_loss + mae_loss
+            self.regression_loss = mae_mse_loss
         else:
-            print("ERROR Regression loss must be one of MSE or MAE")
+            print("ERROR: Regression loss must be one of MSE, MAE, or MAE+MSE")
 
         self.train_transform =  v2.Compose([
             v2.RandomApply(transforms=[v2.GaussianBlur(kernel_size=5, sigma=(0.1, 2.0))], p=0.12),
