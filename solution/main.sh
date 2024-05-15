@@ -11,7 +11,14 @@ REGRESSION_LOSS_COEFFICIENTS_LIST=(
     "[1, 1]"
 )
 
-for REGRESSION_LOSS_COEFFICIENTS in "${REGRESSION_LOSS_COEFFICIENTS_LIST[@]}"
+CLASSIFICATION_LOSS_COEFFICIENT_LIST=(
+    "1e-3"
+    "1e-2"
+    "1e-1"
+    "1"
+)
+
+for CLASSIFICATION_LOSS_COEFFICIENT in "${CLASSIFICATION_LOSS_COEFFICIENT_LIST[@]}"
 do
-    python main.py trainer.max_epochs=$MAX_EPOCHS model.regression_loss="$REGRESSION_LOSS" model.regression_loss_coefficients="$REGRESSION_LOSS_COEFFICIENTS"
+    python main.py trainer.max_epochs=$MAX_EPOCHS model.regression_loss="$REGRESSION_LOSS" model.classification_loss_coefficient="$CLASSIFICATION_LOSS_COEFFICIENT"
 done
