@@ -14,7 +14,7 @@ class EarthQuakeModel(pl.LightningModule):
 
         num_classes = 1
 
-        config = AutoConfig.from_pretrained(self.hparams["model_name"])
+        config = AutoConfig.from_pretrained(self.hparams["model_name"], output_hidden_states=True)
         config.num_channels = self.hparams["in_chans"]
         config.num_labels = num_classes
         self.model = AutoModelForImageClassification.from_config(config)
@@ -40,6 +40,14 @@ class EarthQuakeModel(pl.LightningModule):
         else:
             print("ERROR: Regression loss must be one of MSE, MAE, or MAE+MSE")
 
+        # Classification head (same as the paper)
+        self.classification_head = nn.Sequential(
+            nn.Conv2d(320, 1280, kernel_size=1),
+            nn.AdaptiveAvgPool2d(1),
+            nn.Conv2d(1280, 1, kernel_size=1)
+        )
+        self.classification_loss = nn.BCEWithLogitsLoss()
+
         self.train_transform =  v2.Compose([
             v2.RandomApply(transforms=[v2.GaussianBlur(kernel_size=5, sigma=(0.1, 2.0))], p=0.12),
             v2.RandomHorizontalFlip(p=0.12),
@@ -58,38 +66,30 @@ class EarthQuakeModel(pl.LightningModule):
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         x = self.standardize(x)
         x = self.model(x)
-        if hasattr(x, "logits"):
-            x = x.logits
         # make sure predicted magnitude is between 0-10
-        x = nn.functional.sigmoid(x)*10
-        return x.squeeze()
+        x_reg = nn.functional.sigmoid(x.logits)*10
+        # classificaiton task
+        x_class = self.classification_head(x.hidden_states[-1])
+        return x_reg.squeeze(), x_class.squeeze()
 
     def configure_optimizers(self):
         optimizer = torch.optim.AdamW(
             self.parameters(), lr=self.hparams["lr"], weight_decay=0.01
         )
-        # scheduler = torch.optim.lr_scheduler.OneCycleLR(
-        #     optimizer,
-        #     total_steps=self.trainer.estimated_stepping_batches,
-        #     max_lr=self.hparams["lr"],
-        #     pct_start=0.1,
-        #     cycle_momentum=False,
-        #     div_factor=1e9,
-        #     final_div_factor=1e4,
-        # )
-        # return {
-        #     "optimizer": optimizer,
-        #     "lr_scheduler": {"scheduler": scheduler, "interval": "step"},
-        # }
         return {"optimizer": optimizer}
 
     def training_step(self, batch, batch_idx):
         sample, label, mag = (batch["image"], batch["label"], batch["magnitude"])
 
         sample = self.train_transform(sample)
-        y_r = self(sample)
+        y_r, y_c = self(sample)
 
-        loss = self.regression_loss(y_r, mag)
+        #regression and classification losses
+        reg_loss = self.regression_loss(y_r, mag)
+        class_loss = self.classification_loss(y_c, label.to(torch.float32))
+        loss = reg_loss + self.hparams["classification_loss_coefficient"]*class_loss
+        self.log("train_reg_loss", reg_loss)
+        self.log("train_class_loss", class_loss)
         self.log("train_loss", loss)
 
         return loss
@@ -97,21 +97,26 @@ class EarthQuakeModel(pl.LightningModule):
     def validation_step(self, batch, batch_idx):
         sample, label, mag = (batch["image"], batch["label"], batch["magnitude"])
 
-        y_r = self(sample)
+        y_r, y_c = self(sample)
 
-        loss = self.regression_loss(y_r, mag)
+        #regression and classification losses
+        reg_loss = self.regression_loss(y_r, mag)
+        class_loss = self.classification_loss(y_c, label.to(torch.float32))
+        loss = reg_loss + self.hparams["classification_loss_coefficient"]*class_loss
+        self.log("val_reg_loss", reg_loss)
+        self.log("val_class_loss", class_loss)
+        self.log("val_loss", loss)
 
+        # performance metrics
         self.f1((y_r >= 1).to(torch.int), label)
         self.log("val_f1", self.f1)
         self.regr_metric(y_r, mag)
         self.log(f"val_{self.regr_metric.__class__.__name__}", self.regr_metric)
 
-        self.log("val_loss", loss)
-
     def test_step(self, batch, batch_idx):
         sample, label, mag = (batch["image"], batch["label"], batch["magnitude"])
 
-        y_r = self(sample)
+        y_r, y_c = self(sample)
 
         self.f1((y_r >= 1).to(torch.int), label)
         self.log("val_f1", self.f1)
@@ -120,5 +125,5 @@ class EarthQuakeModel(pl.LightningModule):
 
     def predict_step(self, batch, batch_idx, dataloader_idx=None):
         sample = batch["image"]
-        y_r = self(sample)
+        y_r, y_c = self(sample)
         return y_r
