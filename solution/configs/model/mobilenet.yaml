@@ -1,9 +1,9 @@
 model_name: google/mobilenet_v2_1.0_224
-lr: 0.0001
+lr: 3e-4
 task: "regression"
 in_chans: 4
 mean: [0.1048, 0.0189, 0.1048, 0.0189]
 std: [0.8203, 0.0758, 0.8203, 0.0758]
-regression_loss: "MAE+MSE"
-regression_loss_coefficients: [1, 1]
-classification_loss_coefficient: 0.0001
+reg_mse_w: 1
+class_loss_w: 1e-4
+emb_loss_w: 1e-4
