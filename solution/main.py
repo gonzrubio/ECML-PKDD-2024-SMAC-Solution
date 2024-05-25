@@ -13,7 +13,7 @@ from torchgeo.datamodules import QuakeSetDataModule
 @hydra.main(config_path="configs", config_name="mobilenet", version_base=None)
 def main(args: DictConfig):
 
-    pl.seed_everything(42, workers=True)
+    pl.seed_everything(100195, workers=True)
     torch.set_float32_matmul_precision("medium")
 
     model = EarthQuakeModel(**args.model)
