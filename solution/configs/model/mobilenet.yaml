@@ -6,4 +6,4 @@ mean: [0.1048, 0.0189, 0.1048, 0.0189]
 std: [0.8203, 0.0758, 0.8203, 0.0758]
 regression_loss: "MAE+MSE"
 regression_loss_coefficients: [1, 1]
-classification_loss_coefficient: 1
+classification_loss_coefficient: 0.0001
