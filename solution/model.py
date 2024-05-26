@@ -12,42 +12,46 @@ class EarthQuakeModel(pl.LightningModule):
         super().__init__()
         self.save_hyperparameters()
 
-        num_classes = 1
-
+        # model config
         config = AutoConfig.from_pretrained(self.hparams["model_name"], output_hidden_states=True)
         config.num_channels = self.hparams["in_chans"]
-        config.num_labels = num_classes
-        self.model = AutoModelForImageClassification.from_config(config)
+        config.num_labels = 1   # regression head output size
+        hidden_size_1 = 320     # last hidden state size (reg/class head input size)
+        hidden_size_2 = 1280    # class head hidden size
 
+        # model
+        self.model = AutoModelForImageClassification.from_config(config)  # magnitude prediction
+        self.classification_head = nn.Sequential(                         # event probability logits
+            nn.Conv2d(hidden_size_1, hidden_size_2, kernel_size=1),
+            nn.AdaptiveAvgPool2d(1),
+            nn.Conv2d(hidden_size_2, 1, kernel_size=1)
+        )
+        self.centroids = nn.Parameter(torch.randn(2, hidden_size_1))      # event and no event centroids
+
+        # training losses
+        self.reg_mae_loss = nn.L1Loss()
+        self.reg_mse_loss = nn.MSELoss()
+        self.class_loss = nn.BCEWithLogitsLoss()
+        def embedding_centroids_loss(hidden_state, labels):
+            # average the hidden states spatially to create mean hidden states
+            hidden_state_avg = hidden_state.mean(dim=[2, 3])
+            # intra-class compactness (distance from hidden states to class centroids)
+            d_no_event = (hidden_state_avg[~labels]-self.centroids[0]).norm(dim=1)
+            d_event = (hidden_state_avg[labels]-self.centroids[1]).norm(dim=1)
+            intra_loss = (d_no_event.sum() + d_event.sum()) / labels.shape[0]
+            # inter-class separation (distance between class centroids)
+            inter_loss = (self.centroids[0]-self.centroids[1]).norm()
+            return intra_loss, 1/inter_loss
+        self.emb_loss = embedding_centroids_loss
+
+        # performance metrics
+        self.det_metric = F1Score("multiclass", num_classes=2)
+        self.mag_metric = MeanAbsoluteError()
+
+        # input pre-processing
         self.standardize = v2.Normalize(
             mean=self.hparams["mean"], std=self.hparams["std"]
             )
-
-        self.f1 = F1Score("multiclass", num_classes=2)
-        self.regr_metric = MeanAbsoluteError()
-
-        if self.hparams["regression_loss"] == "MSE":
-            self.regression_loss = nn.MSELoss()
-        elif self.hparams["regression_loss"] == "MAE":
-            self.regression_loss = nn.L1Loss()
-        elif self.hparams["regression_loss"] == "MAE+MSE":
-            mae_weight, mse_weight = self.hparams["regression_loss_coefficients"]
-            def mae_mse_loss(output, target):
-                mse_loss = mse_weight * F.mse_loss(output, target)
-                mae_loss = mae_weight * F.l1_loss(output, target)
-                return mse_loss + mae_loss
-            self.regression_loss = mae_mse_loss
-        else:
-            print("ERROR: Regression loss must be one of MSE, MAE, or MAE+MSE")
-
-        # Classification head (same as the paper)
-        self.classification_head = nn.Sequential(
-            nn.Conv2d(320, 1280, kernel_size=1),
-            nn.AdaptiveAvgPool2d(1),
-            nn.Conv2d(1280, 1, kernel_size=1)
-        )
-        self.classification_loss = nn.BCEWithLogitsLoss()
-
         self.train_transform =  v2.Compose([
             v2.RandomApply(transforms=[v2.GaussianBlur(kernel_size=5, sigma=(0.1, 2.0))], p=0.12),
             v2.RandomHorizontalFlip(p=0.12),
@@ -64,63 +68,86 @@ class EarthQuakeModel(pl.LightningModule):
             ])
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        x = self.standardize(x)
-        x = self.model(x)
-        # make sure predicted magnitude is between 0-10
-        x_reg = nn.functional.sigmoid(x.logits)*10
-        # classificaiton task
+        # outputs:
+        # x_reg - 0 < magnitude < 10
+        # x_class - event probability logits
+        # last hidden state (class/reg head inputs)
+        x = self.model(self.standardize(x))
+        x_reg = 10 * nn.functional.sigmoid(x.logits)
         x_class = self.classification_head(x.hidden_states[-1])
-        return x_reg.squeeze(), x_class.squeeze()
+        return x_reg.squeeze(), x_class.squeeze(), x.hidden_states[-1]
 
     def configure_optimizers(self):
-        optimizer = torch.optim.AdamW(
-            self.parameters(), lr=self.hparams["lr"], weight_decay=0.01
-        )
+        optimizer = torch.optim.AdamW(self.parameters(), lr=self.hparams["lr"], weight_decay=0.01)
         return {"optimizer": optimizer}
 
     def training_step(self, batch, batch_idx):
-        sample, label, mag = (batch["image"], batch["label"], batch["magnitude"])
+        sample, label, mag = (batch["image"], batch["label"].to(torch.float32), batch["magnitude"])
+        y_r, y_c, h_s = self(self.train_transform(sample))
 
-        sample = self.train_transform(sample)
-        y_r, y_c = self(sample)
+        # regression loss
+        mae = self.reg_mae_loss(y_r, mag)
+        mse = self.reg_mse_loss(y_r, mag)
+        self.log("train_mae", mae)
+        self.log("train_mse", mse)
+        reg_loss = mae + self.hparams["reg_mse_w"] * mse
 
-        #regression and classification losses
-        reg_loss = self.regression_loss(y_r, mag)
-        class_loss = self.classification_loss(y_c, label.to(torch.float32))
-        loss = reg_loss + self.hparams["classification_loss_coefficient"]*class_loss
-        self.log("train_reg_loss", reg_loss)
+        # classification loss
+        class_loss = self.class_loss(y_c, label)
         self.log("train_class_loss", class_loss)
-        self.log("train_loss", loss)
+        class_loss *= self.hparams["class_loss_w"]
 
-        return loss
+        # feature embeddings loss
+        emb_intra_loss, emb_inter_loss = self.emb_loss(h_s, label.to(bool))
+        self.log("train_emb_intra_loss", emb_intra_loss)
+        self.log("train_emb_inter_loss", emb_inter_loss)
+        emb_loss = self.hparams["emb_loss_w"] * (emb_intra_loss + emb_inter_loss)
+
+        # total loss
+        total_loss = reg_loss + class_loss + emb_loss
+        self.log("train_loss", total_loss)
+        return total_loss
 
     def validation_step(self, batch, batch_idx):
-        sample, label, mag = (batch["image"], batch["label"], batch["magnitude"])
+        sample, label, mag = (batch["image"], batch["label"].to(torch.float32), batch["magnitude"])
+        y_r, y_c, h_s = self(sample)
 
-        y_r, y_c = self(sample)
+        # regression loss
+        mae = self.reg_mae_loss(y_r, mag)
+        mse = self.reg_mse_loss(y_r, mag)
+        self.log("val_mae", mae)
+        self.log("val_mse", mse)
+        reg_loss = mae + self.hparams["reg_mse_w"] * mse
 
-        #regression and classification losses
-        reg_loss = self.regression_loss(y_r, mag)
-        class_loss = self.classification_loss(y_c, label.to(torch.float32))
-        loss = reg_loss + self.hparams["classification_loss_coefficient"]*class_loss
-        self.log("val_reg_loss", reg_loss)
+        # classification loss
+        class_loss = self.class_loss(y_c, label)
         self.log("val_class_loss", class_loss)
-        self.log("val_loss", loss)
+        class_loss *= self.hparams["class_loss_w"]
 
-        # performance metrics
-        self.f1((y_r >= 1).to(torch.int), label)
-        self.log("val_f1", self.f1)
-        self.regr_metric(y_r, mag)
-        self.log(f"val_{self.regr_metric.__class__.__name__}", self.regr_metric)
+        # feature embeddings loss
+        emb_intra_loss, emb_inter_loss = self.emb_loss(h_s, label.to(bool))
+        self.log("val_emb_intra_loss", emb_intra_loss)
+        self.log("val_emb_inter_loss", emb_inter_loss)
+        emb_loss = self.hparams["emb_loss_w"] * (emb_intra_loss + emb_inter_loss)
+
+        # total loss
+        total_loss = reg_loss + class_loss + emb_loss
+        self.log("val_loss", total_loss)
+
+        # earthquake detection metric
+        det_metric = self.det_metric((y_r >= 1).to(torch.int), label)
+        self.log("det_metric", det_metric)
+
+        # magnitude prediction metric
+        mag_metric = self.mag_metric(y_r, mag)
+        self.log("mag_metric", mag_metric)
 
     def test_step(self, batch, batch_idx):
         sample, label, mag = (batch["image"], batch["label"], batch["magnitude"])
-
-        y_r, y_c = self(sample)
-
-        self.f1((y_r >= 1).to(torch.int), label)
+        y_r, y_c, h_s = self(sample)
+        self.det_metric((y_r >= 1).to(torch.int), label)
+        self.mag_metric(y_r, mag)
         self.log("val_f1", self.f1)
-        self.regr_metric(y_r, mag)
         self.log(f"val_{self.regr_metric.__class__.__name__}", self.regr_metric)
 
     def predict_step(self, batch, batch_idx, dataloader_idx=None):
