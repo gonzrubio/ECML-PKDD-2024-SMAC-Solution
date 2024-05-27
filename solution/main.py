@@ -26,6 +26,7 @@ def main(args: DictConfig):
         name=run_id,
         log_model="all"
         )
+    wandb_logger.watch(model, log="gradients")
 
     checkpoint_callback = ModelCheckpoint(
         monitor="val_loss",
