@@ -1,7 +1,6 @@
 import lightning as pl
 import torch
 from torch import nn
-import torch.nn.functional as F
 from torchmetrics import F1Score, MeanAbsoluteError
 from torchvision.transforms import v2
 from transformers import AutoConfig, AutoModelForImageClassification
