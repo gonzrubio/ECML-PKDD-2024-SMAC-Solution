@@ -2,6 +2,7 @@ import lightning as pl
 import torch
 from torch import nn
 from torchmetrics import F1Score, MeanAbsoluteError
+from torchvision.ops.focal_loss import sigmoid_focal_loss
 from torchvision.transforms import v2
 from transformers import AutoConfig, AutoModelForImageClassification
 
@@ -30,7 +31,10 @@ class EarthQuakeModel(pl.LightningModule):
         # training losses
         self.reg_mae_loss = nn.L1Loss()
         self.reg_mse_loss = nn.MSELoss()
-        self.class_loss = nn.BCEWithLogitsLoss()
+        def classification_loss(y_c, label):
+            return sigmoid_focal_loss(y_c, label.to(torch.float32), reduction='mean')
+        # self.class_loss = nn.BCEWithLogitsLoss()
+        self.class_loss = classification_loss
         def embedding_centroids_loss(hidden_state, labels):
             # average the hidden states spatially to create mean hidden states
             hidden_state_avg = hidden_state.mean(dim=[2, 3])
@@ -92,7 +96,9 @@ class EarthQuakeModel(pl.LightningModule):
         reg_loss = mae + self.hparams["reg_mse_w"] * mse
 
         # classification loss
-        class_loss = self.class_loss(y_c, label)
+        epsilon = 0.1
+        smoothed_labels = label * (1 - epsilon) + 0.5 * epsilon
+        class_loss = self.class_loss(y_c, smoothed_labels)
         self.log("train_class_loss", class_loss)
         class_loss *= self.hparams["class_loss_w"]
 
