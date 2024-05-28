@@ -44,6 +44,8 @@ def main(args: DictConfig):
         logger=wandb_logger,
         log_every_n_steps=50,
         precision="32-true",
+        gradient_clip_val=0.5,
+        gradient_clip_algorithm="value"
     )
 
     trainer.fit(model, datamodule=data_module)
