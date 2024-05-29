@@ -18,15 +18,20 @@ class EarthQuakeModel(pl.LightningModule):
         config.num_labels = 1   # regression head output size
         hidden_size_1 = 320     # last hidden state size (reg/class head input size)
         hidden_size_2 = 1280    # class head hidden size
+        aux_size_1 = 160
+        aux_size_2 = 640
 
         # model
         self.model = AutoModelForImageClassification.from_config(config)  # magnitude prediction
+        self.centroids = nn.Parameter(torch.empty(2, hidden_size_1))      # event and no event centroids
+        nn.init.xavier_uniform_(self.centroids)
         self.classification_head = nn.Sequential(                         # event probability logits
             nn.Conv2d(hidden_size_1, hidden_size_2, kernel_size=1),
             nn.AdaptiveAvgPool2d(1),
             nn.Conv2d(hidden_size_2, 1, kernel_size=1)
         )
-        self.centroids = nn.Parameter(torch.randn(2, hidden_size_1))      # event and no event centroids
+        aux_heads = self._aux_heads(aux_size_1, aux_size_2, hidden_size_1)
+        self.aux_class, self.aux_reg, self.aux_centroid = aux_heads
 
         # training losses
         self.reg_mae_loss = nn.L1Loss()
@@ -70,15 +75,33 @@ class EarthQuakeModel(pl.LightningModule):
                 ])], p=0.12)
             ])
 
+    def _aux_heads(self, aux_size_1, aux_size_2, hidden_size_1):
+        classification_head = nn.Sequential(                     # event probability logits
+            nn.Conv2d(aux_size_1, aux_size_2, kernel_size=1),
+            nn.AdaptiveAvgPool2d(1),
+            nn.Dropout(p=0.1, inplace=False),
+            nn.Conv2d(aux_size_2, 1, kernel_size=1)
+        )
+        regression_head = nn.Sequential(                         # event probability logits
+            nn.Conv2d(aux_size_1, aux_size_2, kernel_size=1),
+            nn.AdaptiveAvgPool2d(1),
+            nn.Dropout(p=0.1, inplace=False),
+            nn.Conv2d(aux_size_2, 1, kernel_size=1)
+        )
+        centroid_head = nn.Conv2d(aux_size_1, hidden_size_1, kernel_size=1)
+        return classification_head, regression_head, centroid_head
+
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         # outputs:
         # x_reg - 0 < magnitude < 10
         # x_class - event probability logits
         # last hidden state (class/reg head inputs)
         x = self.model(self.standardize(x))
-        x_reg = 10 * nn.functional.sigmoid(x.logits)
-        x_class = self.classification_head(x.hidden_states[-1])
-        return x_reg.squeeze(), x_class.squeeze(), x.hidden_states[-1]
+        x_reg = 10 * nn.functional.sigmoid(x.logits).squeeze()
+        x_class = self.classification_head(x.hidden_states[-1]).squeeze()
+        aux_x_reg = 10 * nn.functional.sigmoid(self.aux_reg(x.hidden_states[-2])).squeeze()
+        aux_x_class = self.aux_class(x.hidden_states[-2]).squeeze()
+        return x_reg, x_class, x.hidden_states[-1], aux_x_reg, aux_x_class, x.hidden_states[-2]
 
     def configure_optimizers(self):
         optimizer = torch.optim.AdamW(self.parameters(), lr=self.hparams["lr"], weight_decay=0.01)
@@ -86,7 +109,7 @@ class EarthQuakeModel(pl.LightningModule):
 
     def training_step(self, batch, batch_idx):
         sample, label, mag = (batch["image"], batch["label"].to(torch.float32), batch["magnitude"])
-        y_r, y_c, h_s = self(self.train_transform(sample))
+        y_r, y_c, h_s, y_r_aux, y_c_aux, h_s_aux = self(self.train_transform(sample))
 
         # regression loss
         mae = self.reg_mae_loss(y_r, mag)
@@ -108,14 +131,23 @@ class EarthQuakeModel(pl.LightningModule):
         self.log("train_emb_inter_loss", emb_inter_loss)
         emb_loss = self.hparams["emb_loss_w"] * (emb_intra_loss + emb_inter_loss)
 
+        # aux losses
+        mae_aux = self.reg_mae_loss(y_r_aux, mag)
+        mse_aux = self.reg_mse_loss(y_r_aux, mag)
+        reg_loss_aux = mae_aux + self.hparams["reg_mse_w"] * mse_aux
+        class_loss_aux = self.hparams["class_loss_w"] * self.class_loss(y_c_aux, smoothed_labels)
+        emb_intra_loss_aux, emb_inter_loss_aux = self.emb_loss(self.aux_centroid(h_s_aux), label.to(bool))
+        emb_loss_aux = self.hparams["emb_loss_w"] * (emb_intra_loss_aux + emb_inter_loss_aux)
+        total_aux_loss = self.hparams["aux_loss_w"] * (reg_loss_aux + class_loss_aux + emb_loss_aux)
+
         # total loss
-        total_loss = reg_loss + class_loss + emb_loss
+        total_loss = reg_loss + class_loss + emb_loss + total_aux_loss
         self.log("train_loss", total_loss)
         return total_loss
 
     def validation_step(self, batch, batch_idx):
         sample, label, mag = (batch["image"], batch["label"].to(torch.float32), batch["magnitude"])
-        y_r, y_c, h_s = self(sample)
+        y_r, y_c, h_s = self(sample)[:3]
 
         # regression loss
         mae = self.reg_mae_loss(y_r, mag)
