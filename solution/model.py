@@ -105,7 +105,8 @@ class EarthQuakeModel(pl.LightningModule):
 
     def configure_optimizers(self):
         optimizer = torch.optim.AdamW(self.parameters(), lr=self.hparams["lr"], weight_decay=0.01)
-        return {"optimizer": optimizer}
+        scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=250, gamma=0.1)
+        return {"optimizer": optimizer, "lr_scheduler": scheduler}
 
     def training_step(self, batch, batch_idx):
         sample, label, mag = (batch["image"], batch["label"].to(torch.float32), batch["magnitude"])
