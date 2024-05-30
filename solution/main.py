@@ -29,7 +29,7 @@ def main(args: DictConfig):
     wandb_logger.watch(model, log="gradients")
 
     checkpoint_callback = ModelCheckpoint(
-        monitor="val_loss",
+        monitor="val_mae",
         dirpath=f"checkpoints/{run_id}",
         filename="earthquake-detection-{epoch:02d}-{val_loss:.2f}",
         save_top_k=3,
