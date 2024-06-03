@@ -2,23 +2,24 @@
 
 
 # hyperparameters
-MAX_EPOCHS=1000
-REGRESSION_LOSS="MAE+MSE"
-REGRESSION_LOSS_COEFFICIENTS_LIST=(
-    "[1, 1e-2]"
-    "[1, 1e-1]"
-    "[1, 0.5]"
-    "[1, 1]"
-)
+MAX_EPOCHS=200
+LOSS_WEIGHTS_LIST=(1 1e-2 1e-4)
 
-CLASSIFICATION_LOSS_COEFFICIENT_LIST=(
-    0.001
-    0.01
-    0.1
-    0.0001
-)
-
-for CLASSIFICATION_LOSS_COEFFICIENT in 0.001 0.01 0.1 1.0
+for reg_mse_w in "${LOSS_WEIGHTS_LIST[@]}"
 do
-    python main.py trainer.max_epochs=$MAX_EPOCHS model.regression_loss="$REGRESSION_LOSS" model.classification_loss_coefficient=$CLASSIFICATION_LOSS_COEFFICIENT
+    for class_loss_w in "${LOSS_WEIGHTS_LIST[@]}"
+    do
+        for emb_loss_w in "${LOSS_WEIGHTS_LIST[@]}"
+        do
+            for aux_loss_w in "${LOSS_WEIGHTS_LIST[@]}"
+            do
+                python main.py trainer.max_epochs=$MAX_EPOCHS \
+                model.reg_mse_w=$reg_mse_w \
+                model.class_loss_w=$class_loss_w \
+                model.emb_loss_w=$emb_loss_w \
+                model.aux_loss_w=$aux_loss_w
+            done
+        done
+    done
 done
+
