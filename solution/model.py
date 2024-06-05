@@ -105,7 +105,23 @@ class EarthQuakeModel(pl.LightningModule):
 
     def configure_optimizers(self):
         optimizer = torch.optim.AdamW(self.parameters(), lr=self.hparams["lr"], weight_decay=0.01)
-        scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=250, gamma=0.1)
+
+        if self.hparams["scheduler"] == "none":
+            return {"optimizer": optimizer}
+        elif self.hparams["scheduler"] == "reduce_on_plateau":
+            scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.1, patience=25)
+            return {"optimizer": optimizer, "scheduler": scheduler, "monitor": "val_mae"}
+        if self.hparams["scheduler"] == "step":
+            scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=200, gamma=0.1)
+        elif self.hparams["scheduler"] == "cosine":
+            scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=25)
+        elif self.hparams["scheduler"] == "cosine_warm":
+            scheduler = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(optimizer, T_0=10, T_mult=2)
+        elif self.hparams["scheduler"] == "none":
+            scheduler = None
+        else:
+            raise ValueError("Unsupported scheduler type")
+
         return {"optimizer": optimizer, "lr_scheduler": scheduler}
 
     def training_step(self, batch, batch_idx):
