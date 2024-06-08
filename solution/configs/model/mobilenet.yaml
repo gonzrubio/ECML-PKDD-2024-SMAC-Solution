@@ -1,6 +1,6 @@
 model_name: google/mobilenet_v2_1.0_224
 lr: 3e-4
-scheduler: "none"
+scheduler: "cosine"
 task: "regression"
 in_chans: 4
 mean: [0.1048, 0.0189, 0.1048, 0.0189]
