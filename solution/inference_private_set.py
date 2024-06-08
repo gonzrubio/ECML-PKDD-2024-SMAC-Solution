@@ -17,7 +17,7 @@ def main(checkpoint: str):
     with torch.no_grad():
         for i, sample in tqdm(enumerate(dataset), total=len(dataset)):
             prediction = model(sample["image"].unsqueeze(0))[0].item()
-            if prediction < 1:
+            if not prediction > 4:
                 prediction = 0
             metadata = dataset.data[i]
             predictions.append({
