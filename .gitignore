@@ -1,5 +1,6 @@
 # data, logs and outputs
 *data/
+*private_set/
 *checkpoints/
 *lightning_logs/
 *wandb/
