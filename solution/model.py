@@ -189,7 +189,7 @@ class EarthQuakeModel(pl.LightningModule):
         self.log("val_loss", total_loss)
 
         # earthquake detection metric
-        det_metric = self.det_metric((y_r >= 1).to(torch.int), label)
+        det_metric = self.det_metric((y_r > 1).to(torch.int), label)
         self.log("det_metric", det_metric)
 
         # magnitude prediction metric
@@ -199,7 +199,7 @@ class EarthQuakeModel(pl.LightningModule):
     def test_step(self, batch, batch_idx):
         sample, label, mag = (batch["image"], batch["label"], batch["magnitude"])
         y_r, y_c, h_s = self(sample)
-        self.det_metric((y_r >= 1).to(torch.int), label)
+        self.det_metric((y_r > 1).to(torch.int), label)
         self.mag_metric(y_r, mag)
         self.log("val_f1", self.f1)
         self.log(f"val_{self.regr_metric.__class__.__name__}", self.regr_metric)
