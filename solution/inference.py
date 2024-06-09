@@ -16,6 +16,8 @@ def main(checkpoint: str):
     predictions = []
     for i, sample in tqdm(enumerate(dataset)):
         prediction = model(sample["image"].unsqueeze(0))[0].item()
+        if not prediction > 4:
+            prediction = 0
         metadata = dataset.data[i]
         # Note: The key generation made in this way for public evaluation only.
         key = f"{metadata['key']}/{metadata['patch']}/{metadata['images'][1]}"
