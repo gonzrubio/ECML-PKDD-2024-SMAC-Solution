@@ -31,7 +31,7 @@ def main(args: DictConfig):
     checkpoint_callback = ModelCheckpoint(
         monitor="val_mae",
         dirpath=f"checkpoints/{run_id}",
-        filename="earthquake-detection-{epoch:02d}-{val_loss:.2f}",
+        filename="earthquake-detection-{epoch:02d}-{val_mae:.4f}",
         save_top_k=3,
         mode="min",
     )
