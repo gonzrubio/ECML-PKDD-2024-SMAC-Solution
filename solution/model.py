@@ -36,10 +36,11 @@ class EarthQuakeModel(pl.LightningModule):
         # training losses
         self.reg_mae_loss = nn.L1Loss()
         self.reg_mse_loss = nn.MSELoss()
+
         def classification_loss(y_c, label):
             return sigmoid_focal_loss(y_c, label.to(torch.float32), reduction='mean')
-        # self.class_loss = nn.BCEWithLogitsLoss()
         self.class_loss = classification_loss
+
         def embedding_centroids_loss(hidden_state, labels):
             # average the hidden states spatially to create mean hidden states
             hidden_state_avg = hidden_state.mean(dim=[2, 3])
@@ -204,7 +205,41 @@ class EarthQuakeModel(pl.LightningModule):
         self.log("val_f1", self.f1)
         self.log(f"val_{self.regr_metric.__class__.__name__}", self.regr_metric)
 
+    def forward_magnitude_only(self, x: torch.Tensor) -> torch.Tensor:
+        # Process the input through the model and get the regression value only
+        x = self.model(self.standardize(x))
+        x_reg = 10 * nn.functional.sigmoid(x.logits).squeeze()
+        return x_reg
+
+    def magnitude_head_only(self):
+        # Delete auxiliary heads and main classification head
+        if hasattr(self, 'aux_class'):
+            del self.aux_class
+        if hasattr(self, 'aux_reg'):
+            del self.aux_reg
+        if hasattr(self, 'aux_centroid'):
+            del self.aux_centroid
+        if hasattr(self, 'classification_head'):
+            del self.classification_head
+
     def predict_step(self, batch, batch_idx, dataloader_idx=None):
         sample = batch["image"]
-        y_r, y_c = self(sample)
+        y_r = self.forward_magnitude_only(sample)
         return y_r
+
+
+if __name__ == "__main__":
+    # Initialize the model
+    checkpoint = 'checkpoints/20240603-230822/earthquake-detection-epoch=686-val_loss=0.27.ckpt'
+    model = EarthQuakeModel.load_from_checkpoint(checkpoint, map_location="cpu").eval()
+
+    # Count the number of parameters
+    total_params = sum(p.numel() for p in model.parameters())
+    print(f"Total number of parameters: {total_params}")
+
+    # Delete auxiliary heads and main classification head
+    model.magnitude_head_only()
+
+    # Count the number of parameters
+    total_params = sum(p.numel() for p in model.parameters())
+    print(f"Total number of parameters: {total_params}")
