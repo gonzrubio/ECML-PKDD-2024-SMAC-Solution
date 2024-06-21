@@ -1,2 +1,2 @@
 devices: [0]
-max_epochs: 200
+max_epochs: 1000
