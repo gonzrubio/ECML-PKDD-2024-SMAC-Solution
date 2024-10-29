@@ -1,3 +1,5 @@
+![Capture](https://github.com/user-attachments/assets/34f1954c-04f0-455d-98e8-26e51eee9cf2)
+
 # SMAC
 
 Please report issues to the *Forum* in CodaBench during the competition.
